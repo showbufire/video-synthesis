@@ -4,16 +4,16 @@
 #include <cstdint>
 
 extern "C" {
+#include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/common.h>
+#include <libswscale/swscale.h>
 }
 
 const int FPS = 25;
 const int TIME_LENGTH = 4; // seconds;
 const int TOTAL_FRAMES = FPS * TIME_LENGTH;
-const int WIDTH = 640;
-const int HEIGHT = 480;
 const char *OUTPUT_FILENAME = "img.mpg";
 
 const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
@@ -21,59 +21,125 @@ const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 static uint8_t endcode[] = { 0, 0, 1, 0xb7 };
 
 void video_encode(const char *imgFile) {
-  AVCodec *codec;
-  AVCodecContext *c = NULL;
+  AVFormatContext *pFormatCtx;
+  if (avformat_open_input(&pFormatCtx, imgFile, nullptr, nullptr) != 0) {
+    std::cerr << "Could not open the image file: " << imgFile << std::endl;
+    exit(-1);
+  }
+  if (avformat_find_stream_info(pFormatCtx, nullptr)<0) {
+    std::cerr << "Could not find stream information " << std::endl;
+    exit(-1);
+  }
+  av_dump_format(pFormatCtx, 0, imgFile, 0);
 
-  codec = avcodec_find_encoder(CODEC_ID);
-  if (!codec) {
-    std::cerr << "Codec not found" << std::endl;
-    exit(1);
+  AVCodecContext *pInputCodecCtx;
+  AVCodecContext *pOutputCodecCtx;
+  AVCodec *pInputCodec;
+  AVCodec *pOutputCodec;
+  AVFrame *pInputFrame = av_frame_alloc();
+  AVFrame *pOutputFrame = av_frame_alloc();
+  AVPacket packet;
+
+  // image has one stream
+  pInputCodecCtx = pFormatCtx->streams[0]->codec;
+  pInputCodec = avcodec_find_decoder(pInputCodecCtx->codec_id);
+  if (pInputCodec == nullptr) {
+    std::cerr << "Unsuported codec!" << std::endl;
+    exit(-1);
+  }
+  if (avcodec_open2(pInputCodecCtx, pInputCodec, NULL) < 0) {
+    std::cerr << "Could not open input codec" << std::endl;
+    exit(-1);
   }
 
-  c = avcodec_alloc_context3(codec);
-  if (!c) {
+  pOutputCodecCtx = avcodec_alloc_context3(pOutputCodec);
+  if (!pOutputCodecCtx) {
     std::cerr << "Could not allocate video codec context" << std::endl;
-    exit(1);
+    exit(-1);
+  }
+  pOutputCodecCtx->width = pInputCodecCtx->width;
+  pOutputCodecCtx->height = pInputCodecCtx->height;
+
+  struct SwsContext *swsCtx;
+  swsCtx = sws_getContext(pInputCodecCtx->width,
+                          pInputCodecCtx->height,
+                          pInputCodecCtx->pix_fmt,
+                          pOutputCodecCtx->width,
+                          pOutputCodecCtx->height,
+                          AV_PIX_FMT_YUV420P,
+                          SWS_BILINEAR,
+                          nullptr,
+                          nullptr,
+                          nullptr);
+
+  int numBytes = avpicture_get_size(AV_PIX_FMT_YUV420P,
+                                    pOutputCodecCtx->width,
+                                    pOutputCodecCtx->height);
+  uint8_t *buffer = (uint8_t *)av_malloc( numBytes * sizeof(uint8_t) );
+  avpicture_fill((AVPicture *)pOutputFrame,
+                 buffer,
+                 AV_PIX_FMT_YUV420P,
+		 pOutputCodecCtx->width,
+                 pOutputCodecCtx->height);
+
+  int inputNumBytes = avpicture_get_size(pInputCodecCtx->pix_fmt,
+                                         pInputCodecCtx->width,
+                                         pInputCodecCtx->height);
+  uint8_t *inputBuffer = (uint8_t *)av_malloc(inputNumBytes * sizeof(uint8_t) );
+  avpicture_fill((AVPicture *)pInputFrame,
+                 inputBuffer,
+                 pInputCodecCtx->pix_fmt,
+		 pOutputCodecCtx->width,
+                 pOutputCodecCtx->height);
+
+  while (av_read_frame(pFormatCtx, &packet) >= 0) {
+    int frameFinished;
+    int len = avcodec_decode_video2(pInputCodecCtx,
+                                    pInputFrame,
+                                    &frameFinished,
+                                    &packet);
+    if (len < 0) {
+      std::cerr << "Error while decoding frame: " << av_err2str(len) << std::endl;
+      exit(-1);
+    }
+    if (frameFinished) {
+      break;
+    }
+  }
+  //  av_packet_unref(&packet);
+
+  pOutputCodec = avcodec_find_encoder(CODEC_ID);
+  if (!pOutputCodec) {
+    std::cerr << "Codec not found" << std::endl;
+    exit(-1);
   }
 
-  c->bit_rate = 200000;
-  c->width = WIDTH;
-  c->height = HEIGHT;
+  pOutputCodecCtx->bit_rate = 200000;
 
-  c->time_base = (AVRational){1, FPS};
-  c->gop_size = 25;
-  c->max_b_frames = 1;
-  c->pix_fmt = AV_PIX_FMT_YUV420P;
+  pOutputCodecCtx->time_base = (AVRational){1, FPS};
+  pOutputCodecCtx->gop_size = 25;
+  pOutputCodecCtx->max_b_frames = 1;
+  pOutputCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
 
-  if (avcodec_open2(c, codec, NULL) < 0) {
-    fprintf(stderr, "Could not open codec\n");
-    exit(1);
-  }
-  AVFrame *frame;
-  frame = av_frame_alloc();
-  if (!frame) {
-    std::cerr << "Could not allocate video frame" << std::endl;
-    exit(1);
-  }
-  frame->format = c->pix_fmt;
-  frame->width = c->width;
-  frame->height = c->height;
-
-  int ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height, c->pix_fmt, 32);
-  if (ret < 0) {
-    std::cerr << "Could not allocate raw picture buffer\n" << std::endl;
-    exit(1);
+  if (avcodec_open2(pOutputCodecCtx, pOutputCodec, NULL) < 0) {
+    std::cerr << "Could not open output codec" << std::endl;
+    exit(-1);
   }
 
   FILE *f = fopen(OUTPUT_FILENAME, "wb");
   if (!f) {
     std::cerr << "Could not open file " << OUTPUT_FILENAME << std::endl;
-    exit(1);
+    exit(-1);
   }
 
-  AVPacket pkt;
+  pOutputFrame->width = pOutputCodecCtx->width;
+  pOutputFrame->height = pOutputCodecCtx->height;
+  pOutputFrame->format = pOutputCodecCtx->pix_fmt;
+
   int got_output;
   int i;
+
+  AVPacket pkt;
   for (i = 0; i < TOTAL_FRAMES; i++ ) {
     av_init_packet(&pkt);
     pkt.data = NULL;
@@ -81,25 +147,21 @@ void video_encode(const char *imgFile) {
 
     fflush(stdout);
 
-    for (int y = 0; y < c->height; y++) {
-      for (int x = 0; x < c->width; x++) {
-        frame->data[0][y * frame->linesize[0] + x] = x + y + i * 3;
-      }
-    }
-
-    /* Cb and Cr */
-    for (int y = 0; y < c->height/2; y++) {
-      for (int x = 0; x < c->width/2; x++) {
-        frame->data[1][y * frame->linesize[1] + x] = 128 + y + i * 2;
-        frame->data[2][y * frame->linesize[2] + x] = 64 + x + i * 5;
-      }
-    }
-
-    frame->pts = i;
-    ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
+    sws_scale(swsCtx,
+              (uint8_t const * const *)pInputFrame->data,
+              pInputFrame->linesize,
+              0,
+              pOutputCodecCtx->height,
+              pOutputFrame->data,
+              pOutputFrame->linesize);
+    pOutputFrame->pts = i;
+    int ret = avcodec_encode_video2(pOutputCodecCtx,
+                                    &pkt,
+                                    pOutputFrame,
+                                    &got_output);
     if (ret < 0) {
       std::cerr<< "Error encoding frame" << std::endl;
-      exit(1);
+      exit(-1);
     }
     if (got_output) {
       printf("Write frame %3d (size=%5d)\n", i, pkt.size);
@@ -111,10 +173,13 @@ void video_encode(const char *imgFile) {
   for (got_output = 1; got_output; i++) {
     fflush(stdout);
 
-    ret = avcodec_encode_video2(c, &pkt, NULL, &got_output);
+    int ret = avcodec_encode_video2(pOutputCodecCtx,
+                                    &pkt,
+                                    NULL,
+                                    &got_output);
     if (ret < 0) {
       std::cerr << "Error encoding frame" << std::endl;
-      exit(1);
+      exit(-1);
     }
 
     if (got_output) {
@@ -127,16 +192,20 @@ void video_encode(const char *imgFile) {
   fwrite(endcode, 1, sizeof(endcode), f);
   fclose(f);
 
-  avcodec_close(c);
-  av_free(c);
-  av_freep(&frame->data[0]);
-  av_frame_free(&frame);
+  av_free(inputBuffer);
+  av_free(buffer);
+  avcodec_close(pInputCodecCtx);
+  av_free(pInputCodecCtx);
+  avcodec_close(pOutputCodecCtx);
+  av_free(pOutputCodecCtx);
+  av_free(pInputFrame);
+  av_free(pOutputFrame);
   printf("\n");
 }
 
 int main(int argc, char **argv) {
 
-  avcodec_register_all();
+  av_register_all();
   if (argc < 2) {
     printf("usage: %s imagefile\n"
            "Example program to encode a video stream from image using libavcoded.\n", argv[0]);

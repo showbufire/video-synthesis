@@ -1,7 +1,9 @@
 *.o
 img
+readimg
 
 *.jpg
 *.jpeg
 *.png
 *.mpg
+.DS_Store

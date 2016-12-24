@@ -14,6 +14,7 @@ CC = g++
 .phony: all clean
 
 EXAMPLES =	img		\
+		readimg		\
 
 OBJS=$(addsuffix .o,$(EXAMPLES))
 OUTPUTS=$(addsuffix .mpg,$(EXAMPLES))
