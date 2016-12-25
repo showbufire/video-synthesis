@@ -13,7 +13,7 @@ CC = g++
 
 .phony: all clean
 
-EXAMPLES =	img		\
+EXAMPLES =	img2vid		\
 		readimg		\
 
 OBJS=$(addsuffix .o,$(EXAMPLES))

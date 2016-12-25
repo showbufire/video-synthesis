@@ -14,7 +14,7 @@ extern "C" {
 const int FPS = 25;
 const int TIME_LENGTH = 4; // seconds;
 const int TOTAL_FRAMES = FPS * TIME_LENGTH;
-const char *OUTPUT_FILENAME = "img.mpg";
+const char *OUTPUT_FILENAME = "img2vid.mpg";
 
 const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 
