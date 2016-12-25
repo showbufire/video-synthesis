@@ -1,5 +1,6 @@
 *.o
 img
+img2vid
 readimg
 
 *.jpg

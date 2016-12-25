@@ -21,7 +21,7 @@ const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 static uint8_t endcode[] = { 0, 0, 1, 0xb7 };
 
 void video_encode(const char *imgFile) {
-  AVFormatContext *pFormatCtx;
+  AVFormatContext *pFormatCtx = nullptr;
   if (avformat_open_input(&pFormatCtx, imgFile, nullptr, nullptr) != 0) {
     std::cerr << "Could not open the image file: " << imgFile << std::endl;
     exit(-1);
@@ -32,10 +32,10 @@ void video_encode(const char *imgFile) {
   }
   av_dump_format(pFormatCtx, 0, imgFile, 0);
 
-  AVCodecContext *pInputCodecCtx;
-  AVCodecContext *pOutputCodecCtx;
-  AVCodec *pInputCodec;
-  AVCodec *pOutputCodec;
+  AVCodecContext *pInputCodecCtx = nullptr;
+  AVCodecContext *pOutputCodecCtx = nullptr;
+  AVCodec *pInputCodec = nullptr;
+  AVCodec *pOutputCodec = nullptr;
   AVFrame *pInputFrame = av_frame_alloc();
   AVFrame *pOutputFrame = av_frame_alloc();
   AVPacket packet;
@@ -164,7 +164,7 @@ void video_encode(const char *imgFile) {
       exit(-1);
     }
     if (got_output) {
-      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
+      //      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
       fwrite(pkt.data, 1, pkt.size, f);
       av_packet_unref(&pkt);
     }
@@ -183,7 +183,7 @@ void video_encode(const char *imgFile) {
     }
 
     if (got_output) {
-      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
+      //      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
       fwrite(pkt.data, 1, pkt.size, f);
       av_packet_unref(&pkt);
     }
@@ -200,7 +200,6 @@ void video_encode(const char *imgFile) {
   av_free(pOutputCodecCtx);
   av_free(pInputFrame);
   av_free(pOutputFrame);
-  printf("\n");
 }
 
 int main(int argc, char **argv) {
