@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "VideoDecoder.h"
+#include "VideoEncoder.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -20,144 +21,74 @@ const char *OUTPUT_FILENAME = "img2vid.mpg";
 
 const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 
-static uint8_t endcode[] = { 0, 0, 1, 0xb7 };
-
 using namespace video_syn;
+
+AVFrame *initFrame(int width, int height) {
+  AVFrame *pFrame = av_frame_alloc();
+  pFrame->format = AV_PIX_FMT_YUV420P;
+  pFrame->width = width;
+  pFrame->height = height;
+  int ret = av_image_alloc(pFrame->data,
+                           pFrame->linesize,
+                           pFrame->width,
+                           pFrame->height,
+                           AV_PIX_FMT_YUV420P,
+                           32);
+  if (ret < 0) {
+    throw std::runtime_error("could not allocate raw picture buffer");
+  }
+  return pFrame;
+}
 
 void video_encode(const char *imgFile) {
   VideoDecoder decoder(imgFile);
 
-  AVCodecContext *pOutputCodecCtx = nullptr;
-  AVCodec *pOutputCodec = nullptr;
-  AVFrame *pOutputFrame = av_frame_alloc();
+  int width = decoder.getWidth();
+  int height = decoder.getHeight();
 
-  pOutputFrame->format = AV_PIX_FMT_YUV420P;
-  pOutputFrame->width = decoder.getWidth();
-  pOutputFrame->height = decoder.getHeight();
-  int ret = av_image_alloc(pOutputFrame->data,
-                           pOutputFrame->linesize,
-                           pOutputFrame->width,
-                           pOutputFrame->height,
-                           AV_PIX_FMT_YUV420P,
-                           32);
-  if (ret < 0) {
-    std::cerr << "could not allocate raw picture buffer" << std::endl;
-    exit(-1);
-  }
-
-  pOutputCodecCtx = avcodec_alloc_context3(pOutputCodec);
-  if (!pOutputCodecCtx) {
-    std::cerr << "Could not allocate video codec context" << std::endl;
-    exit(-1);
-  }
-  pOutputCodecCtx->width = decoder.getWidth();
-  pOutputCodecCtx->height = decoder.getHeight();
+  VideoEncoder::Config encoderConfig = {
+    .width = width,
+    .height = height,
+    .pix_fmt = AV_PIX_FMT_YUV420P,
+    .bit_rate = 200000,
+    .time_base = (AVRational){1, FPS},
+    .gop_size = 25,
+    .max_b_frames = 1,
+    .codec_id = CODEC_ID,
+  };
+  VideoEncoder encoder(OUTPUT_FILENAME, encoderConfig);
 
   struct SwsContext *swsCtx;
   swsCtx = sws_getContext(decoder.getWidth(),
                           decoder.getHeight(),
                           decoder.getPixelFormat(),
-                          pOutputCodecCtx->width,
-                          pOutputCodecCtx->height,
+                          width,
+                          height,
                           AV_PIX_FMT_YUV420P,
                           SWS_BILINEAR,
                           nullptr,
                           nullptr,
                           nullptr);
 
-  pOutputCodec = avcodec_find_encoder(CODEC_ID);
-  if (!pOutputCodec) {
-    std::cerr << "Codec not found" << std::endl;
-    exit(-1);
-  }
-
-  pOutputCodecCtx->bit_rate = 200000;
-
-  pOutputCodecCtx->time_base = (AVRational){1, FPS};
-  pOutputCodecCtx->gop_size = 25;
-  pOutputCodecCtx->max_b_frames = 1;
-  pOutputCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-
-  if (avcodec_open2(pOutputCodecCtx, pOutputCodec, NULL) < 0) {
-    std::cerr << "Could not open output codec" << std::endl;
-    exit(-1);
-  }
-
-  FILE *f = fopen(OUTPUT_FILENAME, "wb");
-  if (!f) {
-    std::cerr << "Could not open file " << OUTPUT_FILENAME << std::endl;
-    exit(-1);
-  }
-
-  pOutputFrame->width = pOutputCodecCtx->width;
-  pOutputFrame->height = pOutputCodecCtx->height;
-  pOutputFrame->format = pOutputCodecCtx->pix_fmt;
-
-  int got_output;
-  int i;
-
-  AVPacket pkt;
-
+  AVFrame *pOutputFrame = initFrame(width, height);
   AVFrame *pInputFrame = av_frame_alloc();
   if (!decoder.nextFrame(pInputFrame)) {
-    std::cerr << "Expect a frame from input, but got nothing" << std::endl;
-    exit(-1);
+    throw std::runtime_error("Expect a frame from input, but got nothing");
   }
 
-  for (i = 0; i < TOTAL_FRAMES; i++ ) {
-    av_init_packet(&pkt);
-    pkt.data = NULL;
-    pkt.size = 0;
-
-    fflush(stdout);
-
+  for (int i = 0; i < TOTAL_FRAMES; i++ ) {
     sws_scale(swsCtx,
               (uint8_t const * const *)pInputFrame->data,
               pInputFrame->linesize,
               0,
-              pOutputCodecCtx->height,
+              height,
               pOutputFrame->data,
               pOutputFrame->linesize);
     pOutputFrame->pts = i;
-    int ret = avcodec_encode_video2(pOutputCodecCtx,
-                                    &pkt,
-                                    pOutputFrame,
-                                    &got_output);
-    if (ret < 0) {
-      std::cerr<< "Error encoding frame" << std::endl;
-      exit(-1);
-    }
-    if (got_output) {
-      //      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
-      fwrite(pkt.data, 1, pkt.size, f);
-      av_packet_unref(&pkt);
-    }
+    encoder.encodeFrame(pOutputFrame);
   }
+  encoder.finish();
 
-  for (got_output = 1; got_output; i++) {
-    fflush(stdout);
-
-    int ret = avcodec_encode_video2(pOutputCodecCtx,
-                                    &pkt,
-                                    NULL,
-                                    &got_output);
-    if (ret < 0) {
-      std::cerr << "Error encoding frame" << std::endl;
-      exit(-1);
-    }
-
-    if (got_output) {
-      //      printf("Write frame %3d (size=%5d)\n", i, pkt.size);
-      fwrite(pkt.data, 1, pkt.size, f);
-      av_packet_unref(&pkt);
-    }
-  }
-
-  fwrite(endcode, 1, sizeof(endcode), f);
-  fclose(f);
-
-  avcodec_close(pOutputCodecCtx);
-  av_free(pOutputCodecCtx);
   av_free(pInputFrame);
   av_free(pOutputFrame);
 }
@@ -168,7 +99,7 @@ int main(int argc, char **argv) {
   if (argc < 2) {
     printf("usage: %s imagefile\n"
            "Example program to encode a video stream from image using libavcoded.\n", argv[0]);
-    return 1;
+    return -1;
   }
   video_encode(argv[1]);
 

@@ -11,7 +11,7 @@ CXXFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CXXFLAGS)
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 CC = g++
 
-LIBS = 		VideoDecoder \
+LIBS =  VideoDecoder VideoEncoder
 
 BINS =	img2vid		\
 
