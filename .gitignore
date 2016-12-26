@@ -1,9 +1,13 @@
 *.o
 img2vid
 imgimg
+imgxvid
 
 *.jpg
 *.jpeg
 *.png
 *.mpg
+*.m4v
+*.mp4
+
 .DS_Store
