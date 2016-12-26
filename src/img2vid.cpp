@@ -31,6 +31,20 @@ void video_encode(const char *imgFile) {
   AVCodec *pOutputCodec = nullptr;
   AVFrame *pOutputFrame = av_frame_alloc();
 
+  pOutputFrame->format = AV_PIX_FMT_YUV420P;
+  pOutputFrame->width = decoder.getWidth();
+  pOutputFrame->height = decoder.getHeight();
+  int ret = av_image_alloc(pOutputFrame->data,
+                           pOutputFrame->linesize,
+                           pOutputFrame->width,
+                           pOutputFrame->height,
+                           AV_PIX_FMT_YUV420P,
+                           32);
+  if (ret < 0) {
+    std::cerr << "could not allocate raw picture buffer" << std::endl;
+    exit(-1);
+  }
+
   pOutputCodecCtx = avcodec_alloc_context3(pOutputCodec);
   if (!pOutputCodecCtx) {
     std::cerr << "Could not allocate video codec context" << std::endl;
@@ -50,15 +64,6 @@ void video_encode(const char *imgFile) {
                           nullptr,
                           nullptr,
                           nullptr);
-  int numBytes = avpicture_get_size(AV_PIX_FMT_YUV420P,
-                                    pOutputCodecCtx->width,
-                                    pOutputCodecCtx->height);
-  uint8_t *buffer = (uint8_t *)av_malloc( numBytes * sizeof(uint8_t) );
-  avpicture_fill((AVPicture *)pOutputFrame,
-                 buffer,
-                 AV_PIX_FMT_YUV420P,
-		 pOutputCodecCtx->width,
-                 pOutputCodecCtx->height);
 
   pOutputCodec = avcodec_find_encoder(CODEC_ID);
   if (!pOutputCodec) {
@@ -151,7 +156,6 @@ void video_encode(const char *imgFile) {
   fwrite(endcode, 1, sizeof(endcode), f);
   fclose(f);
 
-  av_free(buffer);
   avcodec_close(pOutputCodecCtx);
   av_free(pOutputCodecCtx);
   av_free(pInputFrame);
