@@ -14,7 +14,18 @@ namespace video_syn {
     }
     av_dump_format(pFormatCtx, 0, mediaFilename, 0);
 
-    pCodecCtx = pFormatCtx->streams[0]->codec;
+    videoStream = -1;
+    for (int i = 0; i < pFormatCtx->nb_streams; i++) {
+      if (pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+        videoStream = i;
+        break;
+      }
+    }
+    if (videoStream < 0) {
+      throw std::runtime_error("can't find video stream");
+    }
+
+    pCodecCtx = pFormatCtx->streams[videoStream]->codec;
     pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
     if (pCodec == nullptr) {
       throw std::runtime_error("Unsuported codec!");
@@ -26,17 +37,25 @@ namespace video_syn {
 
   bool VideoDecoder::nextFrame(AVFrame *pFrame) {
     int frameFinished, len;
+    if (!started) {
+      started = true;
+    } else {
+      av_free_packet(&packet);
+    }
     while (av_read_frame(pFormatCtx, &packet) >= 0) {
-      len = avcodec_decode_video2(pCodecCtx,
-                                  pFrame,
-                                  &frameFinished,
-                                  &packet);
-      if (len < 0) {
-        throw std::runtime_error("Error while decoding frame");
+      if (packet.stream_index == videoStream) {
+        len = avcodec_decode_video2(pCodecCtx,
+                                    pFrame,
+                                    &frameFinished,
+                                    &packet);
+        if (len < 0) {
+          throw std::runtime_error("Error while decoding frame");
+        }
+        if (frameFinished) {
+          return true;
+        }
       }
-      if (frameFinished) {
-        return true;
-      }
+      av_free_packet(&packet);
     }
     return false;
   }

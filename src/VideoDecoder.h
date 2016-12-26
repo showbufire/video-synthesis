@@ -31,6 +31,8 @@ namespace video_syn {
     AVFormatContext *pFormatCtx = nullptr;
     AVCodecContext *pCodecCtx = nullptr;
     AVPacket packet;
+    int videoStream;
+    bool started = false;
   };
 
 }
