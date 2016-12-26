@@ -1,6 +1,7 @@
 #include "VideoDecoder.h"
 
 #include <stdexcept>
+#include <iostream>
 
 namespace video_syn {
 
@@ -56,5 +57,4 @@ namespace video_syn {
     avcodec_close(pCodecCtx);
     av_free(pCodecCtx);
   }
-
 }

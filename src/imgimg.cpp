@@ -15,9 +15,10 @@ extern "C" {
 }
 
 const int FPS = 25;
-const int TIME_LENGTH = 4; // seconds;
-const int TOTAL_FRAMES = FPS * TIME_LENGTH;
-const char *OUTPUT_FILENAME = "img2vid.mpg";
+const int SECONDS_PER_PIC = 2;
+const int WIDTH = 640;
+const int HEIGHT = 480;
+const char *OUTPUT_FILENAME = "imgimg.mpg";
 const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 
 using namespace video_syn;
@@ -39,15 +40,47 @@ AVFrame *initFrame(int width, int height) {
   return pFrame;
 }
 
-void video_encode(const char *imgFile) {
+int video_encode(const char *imgFile,
+                 VideoEncoder &encoder,
+                 int pts) {
   VideoDecoder decoder(imgFile);
+  struct SwsContext *swsCtx;
+  swsCtx = sws_getContext(decoder.getWidth(),
+                          decoder.getHeight(),
+                          decoder.getPixelFormat(),
+                          WIDTH,
+                          HEIGHT,
+                          AV_PIX_FMT_YUV420P,
+                          SWS_BILINEAR,
+                          nullptr,
+                          nullptr,
+                          nullptr);
 
-  int width = decoder.getWidth();
-  int height = decoder.getHeight();
+  AVFrame *pOutputFrame = initFrame(WIDTH, HEIGHT);
+  AVFrame *pInputFrame = av_frame_alloc();
+  if (!decoder.nextFrame(pInputFrame)) {
+    throw std::runtime_error("Expect a frame from input, but got nothing");
+  }
+  for ( int i = 0; i < SECONDS_PER_PIC * FPS; i++ ) {
+    sws_scale(swsCtx,
+              (uint8_t const * const *)pInputFrame->data,
+              pInputFrame->linesize,
+              0,
+              decoder.getHeight(),
+              pOutputFrame->data,
+              pOutputFrame->linesize);
+    pOutputFrame->pts = pts++;
+    encoder.encodeFrame(pOutputFrame);
+  }
+  av_free(pInputFrame);
+  av_free(pOutputFrame);
+  return pts;
+}
 
+void video_encode(const char *firstFilename, const char *secondFilename) {
   VideoEncoder::Config encoderConfig = {
-    .width = width,
-    .height = height,
+    .width = WIDTH,
+    .height = HEIGHT,
     .pix_fmt = AV_PIX_FMT_YUV420P,
     .bit_rate = 200000,
     .time_base = (AVRational){1, FPS},
@@ -56,51 +89,20 @@ void video_encode(const char *imgFile) {
     .codec_id = CODEC_ID,
   };
   VideoEncoder encoder(OUTPUT_FILENAME, encoderConfig);
-
-  struct SwsContext *swsCtx;
-  swsCtx = sws_getContext(decoder.getWidth(),
-                          decoder.getHeight(),
-                          decoder.getPixelFormat(),
-                          width,
-                          height,
-                          AV_PIX_FMT_YUV420P,
-                          SWS_BILINEAR,
-                          nullptr,
-                          nullptr,
-                          nullptr);
-
-  AVFrame *pOutputFrame = initFrame(width, height);
-  AVFrame *pInputFrame = av_frame_alloc();
-  if (!decoder.nextFrame(pInputFrame)) {
-    throw std::runtime_error("Expect a frame from input, but got nothing");
-  }
-
-  for (int i = 0; i < TOTAL_FRAMES; i++ ) {
-    sws_scale(swsCtx,
-              (uint8_t const * const *)pInputFrame->data,
-              pInputFrame->linesize,
-              0,
-              height,
-              pOutputFrame->data,
-              pOutputFrame->linesize);
-    pOutputFrame->pts = i;
-    encoder.encodeFrame(pOutputFrame);
-  }
+  int pts = video_encode(firstFilename, encoder, 0);
+  video_encode(secondFilename, encoder, pts);
   encoder.finish();
-
-  av_free(pInputFrame);
-  av_free(pOutputFrame);
 }
 
 int main(int argc, char **argv) {
 
   av_register_all();
-  if (argc < 2) {
-    printf("usage: %s imagefile\n"
-           "Example program to encode a video stream from image using libavcoded.\n", argv[0]);
+  if (argc < 3) {
+    printf("usage: %s first_img second_img\n"
+           "Example program to encode a video stream from two images using libavcoded.\n", argv[0]);
     return -1;
   }
-  video_encode(argv[1]);
+  video_encode(argv[1], argv[2]);
 
   return 0;
 }

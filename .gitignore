@@ -1,7 +1,6 @@
 *.o
-img
 img2vid
-readimg
+imgimg
 
 *.jpg
 *.jpeg

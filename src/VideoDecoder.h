@@ -28,7 +28,7 @@ namespace video_syn {
 
   private:
     AVCodec *pCodec = nullptr;
-    AVFormatContext *pFormatCtx;
+    AVFormatContext *pFormatCtx = nullptr;
     AVCodecContext *pCodecCtx = nullptr;
     AVPacket packet;
   };

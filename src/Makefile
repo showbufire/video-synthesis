@@ -11,18 +11,30 @@ CXXFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CXXFLAGS)
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 CC = g++
 
-LIBS =  VideoDecoder VideoEncoder
-
 BINS =	img2vid		\
+	imgimg		\
 
-OBJS=$(addsuffix .o,$(LIBS)) $(addsuffix .o,$(BINS))
+OBJS =  $(addsuffix .o,$(BINS)) \
+	VideoEncoder.o  \
+	VideoDecoder.o  \
+
 OUTPUTS=$(addsuffix .mpg,$(BINS))
 
 .phony: all clean clean-output
 
 all: $(BINS)
 
-$(BINS): $(OBJS)
+img2vid: img2vid.o VideoDecoder.o VideoEncoder.o
+
+img2vid.o: img2vid.cpp
+
+imgimg: imgimg.o VideoDecoder.o VideoEncoder.o
+
+imgimg.o: imgimg.cpp
+
+VideoEncoder.o: VideoEncoder.h VideoEncoder.cpp
+
+VideoDecoder.o: VideoDecoder.h VideoDecoder.cpp
 
 clean-output:
 	$(RM) $(OUTPUTS)
