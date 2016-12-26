@@ -3,6 +3,8 @@
 #include <iostream>
 #include <cstdint>
 
+#include "VideoDecoder.h"
+
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
@@ -20,50 +22,27 @@ const AVCodecID CODEC_ID = AV_CODEC_ID_MPEG1VIDEO;
 
 static uint8_t endcode[] = { 0, 0, 1, 0xb7 };
 
+using namespace video_syn;
+
 void video_encode(const char *imgFile) {
-  AVFormatContext *pFormatCtx = nullptr;
-  if (avformat_open_input(&pFormatCtx, imgFile, nullptr, nullptr) != 0) {
-    std::cerr << "Could not open the image file: " << imgFile << std::endl;
-    exit(-1);
-  }
-  if (avformat_find_stream_info(pFormatCtx, nullptr)<0) {
-    std::cerr << "Could not find stream information " << std::endl;
-    exit(-1);
-  }
-  av_dump_format(pFormatCtx, 0, imgFile, 0);
+  VideoDecoder decoder(imgFile);
 
-  AVCodecContext *pInputCodecCtx = nullptr;
   AVCodecContext *pOutputCodecCtx = nullptr;
-  AVCodec *pInputCodec = nullptr;
   AVCodec *pOutputCodec = nullptr;
-  AVFrame *pInputFrame = av_frame_alloc();
   AVFrame *pOutputFrame = av_frame_alloc();
-  AVPacket packet;
-
-  // image has one stream
-  pInputCodecCtx = pFormatCtx->streams[0]->codec;
-  pInputCodec = avcodec_find_decoder(pInputCodecCtx->codec_id);
-  if (pInputCodec == nullptr) {
-    std::cerr << "Unsuported codec!" << std::endl;
-    exit(-1);
-  }
-  if (avcodec_open2(pInputCodecCtx, pInputCodec, NULL) < 0) {
-    std::cerr << "Could not open input codec" << std::endl;
-    exit(-1);
-  }
 
   pOutputCodecCtx = avcodec_alloc_context3(pOutputCodec);
   if (!pOutputCodecCtx) {
     std::cerr << "Could not allocate video codec context" << std::endl;
     exit(-1);
   }
-  pOutputCodecCtx->width = pInputCodecCtx->width;
-  pOutputCodecCtx->height = pInputCodecCtx->height;
+  pOutputCodecCtx->width = decoder.getWidth();
+  pOutputCodecCtx->height = decoder.getHeight();
 
   struct SwsContext *swsCtx;
-  swsCtx = sws_getContext(pInputCodecCtx->width,
-                          pInputCodecCtx->height,
-                          pInputCodecCtx->pix_fmt,
+  swsCtx = sws_getContext(decoder.getWidth(),
+                          decoder.getHeight(),
+                          decoder.getPixelFormat(),
                           pOutputCodecCtx->width,
                           pOutputCodecCtx->height,
                           AV_PIX_FMT_YUV420P,
@@ -71,7 +50,6 @@ void video_encode(const char *imgFile) {
                           nullptr,
                           nullptr,
                           nullptr);
-
   int numBytes = avpicture_get_size(AV_PIX_FMT_YUV420P,
                                     pOutputCodecCtx->width,
                                     pOutputCodecCtx->height);
@@ -81,32 +59,6 @@ void video_encode(const char *imgFile) {
                  AV_PIX_FMT_YUV420P,
 		 pOutputCodecCtx->width,
                  pOutputCodecCtx->height);
-
-  int inputNumBytes = avpicture_get_size(pInputCodecCtx->pix_fmt,
-                                         pInputCodecCtx->width,
-                                         pInputCodecCtx->height);
-  uint8_t *inputBuffer = (uint8_t *)av_malloc(inputNumBytes * sizeof(uint8_t) );
-  avpicture_fill((AVPicture *)pInputFrame,
-                 inputBuffer,
-                 pInputCodecCtx->pix_fmt,
-		 pOutputCodecCtx->width,
-                 pOutputCodecCtx->height);
-
-  while (av_read_frame(pFormatCtx, &packet) >= 0) {
-    int frameFinished;
-    int len = avcodec_decode_video2(pInputCodecCtx,
-                                    pInputFrame,
-                                    &frameFinished,
-                                    &packet);
-    if (len < 0) {
-      std::cerr << "Error while decoding frame: " << av_err2str(len) << std::endl;
-      exit(-1);
-    }
-    if (frameFinished) {
-      break;
-    }
-  }
-  //  av_packet_unref(&packet);
 
   pOutputCodec = avcodec_find_encoder(CODEC_ID);
   if (!pOutputCodec) {
@@ -140,6 +92,13 @@ void video_encode(const char *imgFile) {
   int i;
 
   AVPacket pkt;
+
+  AVFrame *pInputFrame = av_frame_alloc();
+  if (!decoder.nextFrame(pInputFrame)) {
+    std::cerr << "Expect a frame from input, but got nothing" << std::endl;
+    exit(-1);
+  }
+
   for (i = 0; i < TOTAL_FRAMES; i++ ) {
     av_init_packet(&pkt);
     pkt.data = NULL;
@@ -192,10 +151,7 @@ void video_encode(const char *imgFile) {
   fwrite(endcode, 1, sizeof(endcode), f);
   fclose(f);
 
-  av_free(inputBuffer);
   av_free(buffer);
-  avcodec_close(pInputCodecCtx);
-  av_free(pInputCodecCtx);
   avcodec_close(pOutputCodecCtx);
   av_free(pOutputCodecCtx);
   av_free(pInputFrame);

@@ -6,23 +6,26 @@ FFMPEG_LIBS=    libavdevice                        \
                 libswscale                         \
                 libavutil                          \
 
-CFLAGS += -Wall -g
-CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CFLAGS)
+CXXFLAGS += -Wall -g -std=c++11
+CXXFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CXXFLAGS)
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 CC = g++
 
-.phony: all clean
+LIBS = 		VideoDecoder \
 
-EXAMPLES =	img2vid		\
-		readimg		\
+BINS =	img2vid		\
 
-OBJS=$(addsuffix .o,$(EXAMPLES))
-OUTPUTS=$(addsuffix .mpg,$(EXAMPLES))
+OBJS=$(addsuffix .o,$(LIBS)) $(addsuffix .o,$(BINS))
+OUTPUTS=$(addsuffix .mpg,$(BINS))
 
-all: $(OBJS) $(EXAMPLES)
+.phony: all clean clean-output
+
+all: $(BINS)
+
+$(BINS): $(OBJS)
 
 clean-output:
 	$(RM) $(OUTPUTS)
 
 clean: clean-output
-	$(RM) $(EXAMPLES) $(OBJS)
+	$(RM) $(BINS) $(OBJS)
