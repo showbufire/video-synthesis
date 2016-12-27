@@ -14,6 +14,7 @@ CC = g++
 BINS =	img2vid		\
 	imgimg		\
 	imgxvid		\
+	imgonvid	\
 
 OBJS =  $(addsuffix .o,$(BINS)) \
 	VideoEncoder.o  \
@@ -35,6 +36,9 @@ imgimg.o: imgimg.cpp
 
 imgxvid: imgxvid.o VideoDecoder.o VideoEncoder.o
 imgxvid.o: imgxvid.cpp
+
+imgonvid: imgonvid.o VideoDecoder.o VideoEncoder.o
+imgonvid.o: imgonvid.cpp
 
 VideoEncoder.o: VideoEncoder.h VideoEncoder.cpp
 

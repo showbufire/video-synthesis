@@ -26,6 +26,8 @@ namespace video_syn {
 
     AVPixelFormat getPixelFormat();
 
+    AVRational getTimeBase();
+
   private:
     AVCodec *pCodec = nullptr;
     AVFormatContext *pFormatCtx = nullptr;

@@ -72,6 +72,10 @@ namespace video_syn {
     return pCodecCtx->pix_fmt;
   }
 
+  AVRational VideoDecoder::getTimeBase() {
+    return pFormatCtx->streams[videoStream]->time_base;
+  }
+
   VideoDecoder::~VideoDecoder() {
     avcodec_close(pCodecCtx);
     av_free(pCodecCtx);

@@ -119,7 +119,7 @@ void encode(const char *imgFilename, const char *vidFilename) {
     .pix_fmt = AV_PIX_FMT_YUV420P,
     .bit_rate = 200000,
     .time_base = (AVRational){1, FPS},
-    .gop_size = 25,
+    .gop_size = 10,
     .max_b_frames = 1,
     .codec_id = CODEC_ID,
   };
