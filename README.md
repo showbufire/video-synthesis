@@ -6,3 +6,12 @@
 * imgonvid: put the image on an existing video, like a watermark, for all the frames
 
 **NOTE: There's no audio at the moment.**
+
+## Install
+
+```
+mkdir build
+cd build
+cmake ..
+make
+```

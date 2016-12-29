@@ -1,14 +1,10 @@
-*.o
-img2vid
-imgimg
-imgxvid
-imgonvid
-
-*.jpg
-*.jpeg
-*.png
+# output
 *.mpg
-*.m4v
-*.mp4
 
 .DS_Store
+
+# build files
+build/
+
+# image and video files for testing
+test_media/
